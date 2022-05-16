@@ -1,0 +1,68 @@
+<html lang="en">
+
+  <head>
+    <title>Pixel-Toons</title>
+    <link rel="stylesheet" href="./styles/style.css">
+    <script type="module" src="./scripts/index.js"></script>
+    <link rel="icon" type="image/x-icon" href="./images/favicon.ico">
+  </head>
+
+  <body>
+    <div class="container">
+      <div id="menu" class="main-panel">
+        <div class="menu-item" id="file-create">
+          <span class="text">Create</span>
+        </div>
+        <div class="menu-item" id="file-clear">
+          <span class="text">Clear</span>
+        </div>
+        <div class="menu-item" id="export-button">
+          <span class="text">Export</span>
+        </div>
+      </div>
+      <div id="main">
+        <div id="toolbar" class="white-panel thing-container">
+          <div class="main-panel label-panel"><span class="text">Undo/Redo</span></div>
+          <div class="other-panel" id="state-button-container">
+            <div id="undo-button" class="state-button"></div>
+            <div id="redo-button" class="state-button"></div>
+          </div>
+          <div class="main-panel label-panel"><span class="text">Tools</span></div>
+          <div id="tools" class="other-panel">
+
+          </div>
+        </div>
+        <div id="canvas-parent">
+          <div id="canvas-wrapper">
+            <div class="canvas-element" id="canvas-background"></div>
+          </div>
+        </div>
+        <div id="sidebar" class="white-panel thing-container">
+          <div class="main-panel label-panel"><span class="text">Layers</span></div>
+          <div id="layer-container" class="other-panel">
+
+          </div>
+          <div class="main-panel label-panel" id="add-layer-button"><span class="text">New</span></div>
+          <div class="other-panel" id="layer-actions">
+            <button id="remove-layer-button">Remove layer</button>
+            <button id="move-up-layer-button">Move layer up</button>
+            <button id="move-down-layer-button">Move layer down</button>
+            <button id="unite-layer-button">Unite with previous</button>
+          </div>
+        </div>
+      </div>
+      <div id="footer" class="white-panel"></div>
+    </div>
+
+    <div id="file-create-modal" class="modal">
+      <div class="modal-content">
+        <label>Width</label>
+        <input type="number" id="width-input" value="50">
+        <label>Height</label>
+        <input type="number" id="height-input" value="50">
+        <button id="file-create-finish">CREATE</button>
+      </div>
+    </div>
+  </body>
+
+</html>
