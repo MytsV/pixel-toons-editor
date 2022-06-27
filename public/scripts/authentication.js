@@ -1,4 +1,8 @@
-import { authentication, uploadFile, userDatabase } from './utilities/database_handler.js';
+import {
+  authentication,
+  uploadFile,
+  userDatabase
+} from './utilities/database_handler.js';
 
 const DISPLAY_SHOW = 'block';
 const DISPLAY_HIDE = 'none';
