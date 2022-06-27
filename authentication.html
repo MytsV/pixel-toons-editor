@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Authentication</title>
+  <link rel="stylesheet" href="./styles/style.css">
+  <script type="module" src="./scripts/authentication.js"></script>
+</head>
+<body>
+  <div id="menu" class="main-panel">
+    <div class="menu-item" id="to-main-page">
+      <a href="authentication.html"><span class="text">pixtoons</span></a>
+    </div>
+  </div>
+  <form id="register-form" style="display:none;">
+    <div class="text">Email</div>
+    <input type="email" id="email-register" class="white-panel" required>
+    <div class="text">Nickname</div>
+    <input type="text" id="nickname" class="white-panel" required>
+    <div class="text">Biography</div>
+    <input type="text" id="biography" class="white-panel" required>
+    <div class="text">Date of birth</div>
+    <input type="date" id="date-of-birth" class="white-panel" required>
+    <div class="text">Avatar</div>
+    <input type="file" id="avatar" class="white-panel">
+    <div class="text">Password (6 symbols minimum)</div>
+    <input type="password" id="password-register" class="white-panel" required>
+  </form>
+  <form id="login-form">
+    <div class="text">Email</div>
+    <input type="email" id="email-login" class="white-panel" required>
+    <div class="text">Password (6 symbols minimum)</div>
+    <input type="password" id="password-login" class="white-panel" required>
+  </form>
+
+  <div id="login" class="main-panel label-panel button"><span class="text">LOG IN</span></div>
+  <div id="register" class="main-panel label-panel button"><span class="text">REGISTER</span></div>
+</body>
+</html>

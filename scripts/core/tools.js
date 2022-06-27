@@ -1,11 +1,16 @@
 import { Coordinates } from '../utilities/coordinates.js';
 import { Color } from '../utilities/color.js';
 
+const DEFAULT_PENCIL_COLOR = '#000000';
+const DEFAULT_THICKNESS = 1;
+
 /*
 An abstract class which defines drawing operations.
 It is linked with canvas when chosen and must be disabled after the stop of use
  */
 class Tool {
+  static color = Color.fromHex(DEFAULT_PENCIL_COLOR);
+
   constructor() {
     if (new.target === Tool) {
       throw Error('Abstract class cannot be instantiated');
@@ -18,6 +23,7 @@ class Tool {
        */
       this.listenersCanvas = new Map();
       this.listenersDocument = new Map();
+      this.thickness = DEFAULT_THICKNESS;
     }
   }
 
@@ -26,72 +32,177 @@ class Tool {
     this.setEvents();
   }
 
+  //A method which will subscribe to events in web browser
+  setEvents() {
+    this.#iterateListeners((element, [key, listener]) => {
+      element.addEventListener(key, listener);
+    });
+  }
+
+  //Unsubscribing from events when the tool is not used
   disable() {
-    this.listenersCanvas.forEach((listener, key) => this.canvas.mainElement.removeEventListener(key, listener));
-    this.listenersDocument.forEach((listener, key) => document.removeEventListener(key, listener));
+    this.#iterateListeners((element, [key, listener]) => {
+      element.removeEventListener(key, listener);
+    });
     this.canvas = null;
   }
 
-  setEvents() { //A method which will subscribe to events in web browser
-    this.listenersCanvas.forEach((listener, key) => this.canvas.mainElement.addEventListener(key, listener));
-    this.listenersDocument.forEach((listener, key) => document.addEventListener(key, listener));
+  #iterateListeners(updateEvent) {
+    if (!this.canvas) return;
+    const listenersWithElement = [
+      [this.listenersDocument, document],
+      [this.listenersCanvas, this.canvas.element]
+    ];
+    for (const [listeners, element] of listenersWithElement) {
+      for (const listenerEntry of listeners.entries()) {
+        updateEvent(element, listenerEntry);
+      }
+    }
+  }
+
+  //Makes the class open to extensions
+  getColor() {
+    return Tool.color;
+  }
+
+  _drawPoint(color, { x, y }) {
+    for (let i = 0; i < this.thickness; i++) {
+      for (let j = 0; j < this.thickness; j++) {
+        this.canvas.image.setPixelColor(x + i, y + j, color);
+      }
+    }
+  }
+
+  _plotLine(color, src, dest) {
+    const plotPoint = ({ x, y }) => this._drawPoint(color, { x, y });
+    bresenhamLine(dest, src, plotPoint);
+  }
+
+  _toRealCoords(abs) {
+    const { element } = this.canvas;
+
+    const rect = element.getBoundingClientRect(); //Allows to retrieve offset
+    const rel = new Coordinates(abs.x - rect.left, abs.y - rect.top);
+
+    const ratio = Tool.#getRatio(element);
+    const curr = new Coordinates(rel.x * ratio.width, rel.y * ratio.height);
+
+    const overflowOff = (this.thickness / 2) | 0;
+    const sideOff = this.thickness % 2;
+    //Check for overflow
+    curr.x = Math.min(element.width - overflowOff - sideOff, curr.x);
+    curr.x = Math.max(overflowOff, curr.x);
+    curr.y = Math.min(element.height - overflowOff - sideOff, curr.y);
+    curr.y = Math.max(overflowOff, curr.y);
+
+    return new Coordinates(Math.floor(curr.x), Math.floor(curr.y));
+  }
+
+  _toAbsCoords(real) {
+    const { element } = this.canvas;
+
+    const ratio = Tool.#getRatio(element);
+    const curr = new Coordinates(real.x / ratio.width, real.y / ratio.height);
+    const rect = element.getBoundingClientRect();
+    return new Coordinates(curr.x + rect.left, curr.y + rect.top);
+  }
+
+  static #getRatio(element) {
+    const { width, height, offsetWidth, offsetHeight } = element;
+    return {
+      width: width / offsetWidth,
+      height: height / offsetHeight
+    };
+  }
+}
+
+class PointedTool extends Tool {
+  _lastCoords;
+
+  constructor() {
+    super();
+    if (new.target === PointedTool) {
+      throw Error('Abstract class cannot be instantiated');
+    }
+  }
+
+  //Is there enough distance between last and current point of drawing
+  _isOffsetValid(event) {
+    const { element } = this.canvas;
+    let minOffset = element.offsetWidth / element.width;
+
+    //We decrease minimal offset to make drawing more smooth
+    const ERROR = 0.5;
+    minOffset -= minOffset * ERROR * this.thickness;
+
+    const dx = event.clientX - this._lastCoords.x;
+    const dy = event.clientY - this._lastCoords.y;
+    return Math.sqrt(dx * dx + dy * dy) >= minOffset;
+  }
+
+  _center(coords) {
+    if (this.thickness <= 1) return coords;
+    const difference = (this.thickness / 2) | 0;
+    const delta = new Coordinates(difference, difference);
+    return Coordinates.getDifference(delta, coords);
   }
 }
 
 /*
 Tool which draws simple lines on the canvas
  */
-class Pencil extends Tool {
-  #lastCoordinates;
+class Pencil extends PointedTool {
   #drawing;
 
   constructor() {
     super();
-    this.#lastCoordinates = undefined;
     this.#drawing = false;
   }
 
   link(canvas) {
     super.link(canvas);
-    const mixin = { //To achieve less arguments for functions we assign mixins to canvas
-      drawPoint,
-      plotLine
-    };
-    Object.assign(canvas, mixin);
   }
 
   setEvents() {
-    this.listenersCanvas.set('mousedown', (event) => this.#onMouseDown(event));
-    this.listenersCanvas.set('click', (event) => this.#onClick(event));
-    this.listenersDocument.set('mouseup', () => this.#onMouseUp());
-    this.listenersDocument.set('mousemove', (event) => this.#onMouseMove(event));
+    const { listenersCanvas, listenersDocument } = this;
+
+    listenersCanvas.set('mousedown', (event) => this.#onMouseDown(event));
+    listenersCanvas.set('click', (event) => this.#onClick(event));
+    listenersDocument.set('mouseup', () => this.#onMouseUp());
+    listenersDocument.set('mousemove', (event) => this.#onMouseMove(event));
 
     super.setEvents();
   }
 
   //When mouse button is initially pressed, we start drawing
   #onMouseDown(event) {
-    this.#lastCoordinates = new Coordinates(event.clientX, event.clientY);
+    this._lastCoords = new Coordinates(event.clientX, event.clientY);
     this.#drawing = true;
   }
 
   //When mouse is pressed and release, we draw one pixel
   #onClick(event) {
-    const coordinates = getRealCoordinates(this.canvas.mainElement, new Coordinates(event.clientX, event.clientY));
-    this.canvas.drawPoint(this.getColor(), coordinates);
+    const mouseCoords = new Coordinates(event.clientX, event.clientY);
+    const canvasCoords = this._toRealCoords(mouseCoords);
+    this._drawPoint(this.getColor(), this._center(canvasCoords));
     this.canvas.redraw();
   }
 
   //When mouse is moved throughout canvas, we leave trail
   #onMouseMove(event) {
-    if (!this.#drawing) return; //We don't draw if mouse button is not held pressed
-    if (!this.#isOffsetValid(event)) return; //We don't draw if between last drawn point there is not enough space
+    //We don't draw if mouse button is not held pressed
+    if (!this.#drawing) return;
+    //We don't draw if between last drawn point there is not enough space
+    if (!this._isOffsetValid(event)) return;
 
-    const dest = new Coordinates(event.clientX, event.clientY);
-    this.canvas.plotLine(this.getColor(), this.#lastCoordinates, dest);
+    const destAbs = new Coordinates(event.clientX, event.clientY);
+    const destReal = this._toRealCoords(destAbs);
+    const src = this._toRealCoords(this._lastCoords);
+
+    this._plotLine(this.getColor(), this._center(src), this._center(destReal));
     this.canvas.redraw();
 
-    this.#lastCoordinates = dest;
+    this._lastCoords = destAbs;
   }
 
   #onMouseUp() {
@@ -100,31 +211,6 @@ class Pencil extends Tool {
     }
     this.#drawing = false;
   }
-
-  //Determines if there is enough distance between last and current point of drawing
-  #isOffsetValid(event) {
-    const canvasElement = this.canvas.mainElement;
-    let minOffset = canvasElement.offsetWidth / canvasElement.width;
-
-    //We decrease minimal offset to make drawing more smooth
-    const ERROR = 0.3;
-    minOffset -= minOffset * ERROR;
-
-    const dx = event.clientX - this.#lastCoordinates.x;
-    const dy = event.clientY - this.#lastCoordinates.y;
-    return Math.abs(dx) >= minOffset || Math.abs(dy) >= minOffset;
-  }
-
-  //Makes the class open to extensions
-  getColor() {
-    return this.canvas.state.color;
-  }
-}
-
-function plotLine(color, src, dest) {
-  const srcReal = getRealCoordinates(this.mainElement, dest);
-  const destReal = getRealCoordinates(this.mainElement, src);
-  bresenhamLine(destReal, srcReal, ({ x, y }) => this.drawPoint(color, { x, y }));
 }
 
 /*
@@ -136,11 +222,73 @@ class Eraser extends Pencil {
   }
 }
 
-/*
-Antialiasing is not suited for the application,
-hence instead of native lineTo() function we use Bresenham's algorithm to draw a line.
+class Pointer extends PointedTool {
+  constructor() {
+    super();
+    this.#setUpContext();
+    this.canvasClean = true;
+  }
 
-Refer to this link https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm for implementation details
+  #setUpContext() {
+    this.pointerCanvas = document.getElementById('canvas-pointer');
+    this.context = this.pointerCanvas.getContext('2d');
+    this.coordsElement = document.getElementById('coordinates');
+  }
+
+  link(canvas) {
+    super.link(canvas);
+    this.pointerCanvas.width = canvas.width;
+    this.pointerCanvas.height = canvas.height;
+  }
+
+  setEvents() {
+    const { listenersDocument } = this;
+    listenersDocument.set('mousemove', (event) => this.#onMouseMove(event));
+    super.setEvents();
+  }
+
+  #onMouseMove(event) {
+    if (event.target !== this.canvas.element) {
+      this.#cleanCanvas();
+      return;
+    }
+    this.canvasClean = false;
+
+    const destAbs = new Coordinates(event.clientX, event.clientY);
+    const destReal = this._toRealCoords(destAbs);
+    const centered = this._center(destReal);
+    if (this._lastCoords && centered.equal(this._lastCoords)) return;
+    this.#highlightPixel(centered, this.getColor());
+    this.coordsElement.innerText = `x: ${centered.x}, y: ${centered.y}`;
+
+    this._lastCoords = centered;
+  }
+
+  #cleanCanvas() {
+    if (this.canvasClean) return;
+    this.canvasClean = true;
+    this.#highlightPixel(new Coordinates(-1, -1), '#00000000');
+    this.coordsElement.innerText = '';
+  }
+
+  #highlightPixel(coords, highlightColor) {
+    this.context.fillStyle = highlightColor.toString();
+    //This operation ensures the clearing of the canvas before each drawing
+    this.context.globalCompositeOperation = 'copy';
+    this.context.fillRect(coords.x, coords.y, this.thickness, this.thickness);
+  }
+
+  getColor() {
+    return Color.fromHex('#8080807F');
+  }
+}
+
+/*
+Antialiasing is not suited for the application.
+Instead of native lineTo() function we use Bresenham's algorithm to draw a line.
+
+Refer to this link for implementation details:
+https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
  */
 function bresenhamLine(src, dest, plotPoint) {
   const diff = Coordinates.getDifference(src, dest);
@@ -149,7 +297,7 @@ function bresenhamLine(src, dest, plotPoint) {
   diff.x = Math.abs(diff.x);
   diff.y = -Math.abs(diff.y);
 
-  //Error allows us to perform all octant drawing. The algorithm is still precise
+  //Error allows us to perform all octant drawing
   let error = diff.x + diff.y;
   const curr = new Coordinates(src.x, src.y);
 
@@ -183,10 +331,6 @@ class BucketFill extends Tool {
 
   link(canvas) {
     super.link(canvas);
-    const mixin = {
-      drawPoint,
-    };
-    Object.assign(canvas, mixin);
   }
 
   setEvents() {
@@ -195,14 +339,16 @@ class BucketFill extends Tool {
   }
 
   #onClick(event) {
-    const coordinates = getRealCoordinates(this.canvas.mainElement, new Coordinates(event.clientX, event.clientY));
-    this.#floodFill(coordinates);
+    const mouseCoords = new Coordinates(event.clientX, event.clientY);
+    const realCoords = this._toRealCoords(mouseCoords);
+    this.#floodFill(realCoords);
     this.canvas.redraw();
     this.canvas.save();
   }
 
   #floodFill(initial) {
-    const initialColor = this.canvas.image.getPixelColor(initial.x, initial.y);
+    const image = this.canvas.image;
+    const initialColor = image.getPixelColor(initial.x, initial.y);
 
     this.#queue = [];
     this.#visited = this.#initVisited();
@@ -210,9 +356,9 @@ class BucketFill extends Tool {
 
     while (this.#queue.length !== 0) {
       const current = this.#queue.shift();
-      const currentColor = this.canvas.image.getPixelColor(current.x, current.y);
+      const currentColor = image.getPixelColor(current.x, current.y);
       if (!this.#isColorValid(initialColor, currentColor)) continue;
-      this.canvas.drawPoint(this.getColor(), current);
+      this._drawPoint(this.getColor(), current);
 
       this.#visit(new Coordinates(current.x - 1, current.y));
       this.#visit(new Coordinates(current.x + 1, current.y));
@@ -224,7 +370,8 @@ class BucketFill extends Tool {
   #initVisited() {
     const width = this.canvas.image.width;
     const height = this.canvas.image.height;
-    return Array(width).fill(null).map(() => Array(height).fill(false)); //Create a matrix
+    //Create a matrix
+    return Array(width).fill(null).map(() => Array(height).fill(false));
   }
 
   #isColorValid(initial, current) {
@@ -233,41 +380,24 @@ class BucketFill extends Tool {
       return parameterB <= (parameterA + this.tolerance);
     };
 
-    return inRange(initial.r, current.r) && inRange(initial.g, current.g) && inRange(initial.b, current.b) &&
-      inRange(initial.alpha, current.alpha);
+    return inRange(initial.r, current.r) && inRange(initial.g, current.g) &&
+      inRange(initial.b, current.b) && inRange(initial.alpha, current.alpha);
   }
 
   #visit(pixel) {
-    if (pixel.x < 0 || pixel.x >= this.canvas.image.width) return; //Check for overflow
+    //Check for overflow
+    if (pixel.x < 0 || pixel.x >= this.canvas.image.width) return;
     if (pixel.y < 0 || pixel.y >= this.canvas.image.height) return;
-    if (this.#visited[pixel.x][pixel.y]) return; //If a pixel has already been viewed, skip it
-    this.#visited[pixel.x][pixel.y] = true; //Mark pixel as already viewed
+    //If a pixel has already been viewed, skip it
+    if (this.#visited[pixel.x][pixel.y]) return;
+    //Mark pixel as already viewed
+    this.#visited[pixel.x][pixel.y] = true;
     this.#queue.push(pixel);
   }
 
   getColor() {
-    return this.canvas.state.color;
+    return Tool.color;
   }
 }
 
-function drawPoint(color, { x, y }) {
-  this.image.setPixelColor(x, y, color);
-}
-
-function getRealCoordinates(element, absCoordinates) {
-  const rect = element.getBoundingClientRect(); //Allows to retrieve offset
-  const relative = new Coordinates(absCoordinates.x - rect.left, absCoordinates.y - rect.top);
-
-  const resolution = { width: element.width / element.offsetWidth, height: element.height / element.offsetHeight };
-  const curr = new Coordinates(relative.x * resolution.width, relative.y * resolution.height);
-
-  //Check for overflow
-  curr.x = Math.min(element.width - 1, curr.x);
-  curr.x = Math.max(0, curr.x);
-  curr.y = Math.min(element.height - 1, curr.y);
-  curr.y = Math.max(0, curr.y);
-
-  return new Coordinates(Math.floor(curr.x), Math.floor(curr.y));
-}
-
-export { Pencil, Eraser, BucketFill };
+export { Tool, Pencil, Eraser, BucketFill, Pointer };

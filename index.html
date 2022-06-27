@@ -10,57 +10,111 @@
   <body>
     <div class="container">
       <div id="menu" class="main-panel">
-        <div class="menu-item" id="file-create">
-          <span class="text">Create</span>
+        <div class="menu-item" id="to-main-page">
+          <a href="authentication.html"><span class="text">pixtoons</span></a>
         </div>
-        <div class="menu-item" id="file-clear">
-          <span class="text">Clear</span>
+        <div class="menu-item" id="create-file">
+          <span class="text button">File</span>
         </div>
-        <div class="menu-item" id="export-button">
-          <span class="text">Export</span>
+        <div class="menu-item" id="clear-file">
+          <span class="text button">Clear</span>
         </div>
+        <div class="menu-item" id="export-image">
+          <span class="text button">Export</span>
+        </div>
+        <div class="menu-item" id="shortcuts">
+          <span class="text button">Shortcuts</span>
+        </div>
+        <div id="preview-menu" class="menu-item"><span class="text button">Preview</span></div>
       </div>
       <div id="main">
-        <div id="toolbar" class="white-panel thing-container">
-          <div class="main-panel label-panel"><span class="text">Undo/Redo</span></div>
-          <div class="other-panel" id="state-button-container">
-            <div id="undo-button" class="state-button"></div>
-            <div id="redo-button" class="state-button"></div>
-          </div>
-          <div class="main-panel label-panel"><span class="text">Tools</span></div>
-          <div id="tools" class="other-panel">
+        <div id="toolbar" class="main-panel">
+          <div id="tools">
 
           </div>
         </div>
         <div id="canvas-parent">
-          <div id="canvas-wrapper">
-            <div class="canvas-element" id="canvas-background"></div>
+          <div class="main-panel" id="tool-options">
+            <div id="state-button-container" class="tool-option-container">
+              <div id="undo" class="state-button"></div>
+              <div id="redo" class="state-button"></div>
+            </div>
           </div>
+          <div id="canvas-wrapper-wrapper">
+            <div id="canvas-wrapper">
+              <div class="canvas-element" id="canvas-background"></div>
+              <div class="canvas-element" id="canvas-overlay"></div>
+              <div id="canvas-layers" class="canvas-element"></div>
+              <canvas class="canvas-element" id="canvas-pointer"></canvas>
+              <div id="preview" class="canvas-element"></div>
+            </div>
+          </div>
+          <div class="main-panel" id="canvas-bottom"><div id="coordinates"></div></div>
         </div>
-        <div id="sidebar" class="white-panel thing-container">
-          <div class="main-panel label-panel"><span class="text">Layers</span></div>
-          <div id="layer-container" class="other-panel">
-
+        <div id="sidebar" class="main-panel thing-container">
+          <div id="color-picker" class="white-panel">
+            <div id="picker-container">
+              <!-- <canvas id="wheel-canvas"></canvas>
+              <canvas id="rectangle-canvas"></canvas> -->
+              <input type="color" id="picker-input">
+            </div>
+            <div id="color-chosen"></div>
           </div>
-          <div class="main-panel label-panel" id="add-layer-button"><span class="text">New</span></div>
-          <div class="other-panel" id="layer-actions">
-            <button id="remove-layer-button">Remove layer</button>
-            <button id="move-up-layer-button">Move layer up</button>
-            <button id="move-down-layer-button">Move layer down</button>
-            <button id="unite-layer-button">Unite with previous</button>
+          <div id="palette" class="white-panel"></div>
+          <div id="navigation" class="white-panel">
+            <div id="zoom-container">
+              <div id="zoom-out" class="zoom-button"></div>
+              <div id="zoom-in" class="zoom-button"></div>
+            </div>
+          </div>
+          <div class="label-panel" id="entity-choice"><span class="text button entity-chosen" id="show-layers">Layers</span><span class="text button" id="show-frames">Frames</span></div>
+          <div id="entity-list" class="white-panel"></div>
+          <div class="white-panel" id="entity-actions">
+            <div id="add-entity" class="entity-action"></div>
+            <div id="remove-entity" class="entity-action"></div>
+            <div id="move-entity-up" class="entity-action"></div>
+            <div id="move-entity-down" class="entity-action"></div>
+            <div id="merge-entities" class="entity-action"></div>
+            <div id="duplicate-entity" class="entity-action"></div>
           </div>
         </div>
       </div>
-      <div id="footer" class="white-panel"></div>
-    </div>
 
     <div id="file-create-modal" class="modal">
       <div class="modal-content">
-        <label>Width</label>
-        <input type="number" id="width-input" value="50">
-        <label>Height</label>
-        <input type="number" id="height-input" value="50">
-        <button id="file-create-finish">CREATE</button>
+        <div class="main-panel label-panel"><span class="text">Create a new file</span></div>
+        <div id="file-create-form">
+          <div class="text">Width</div>
+          <input type="number" id="width-input" value="50" class="white-panel text-ordinary">
+          <div class="text">Height</div>
+          <input type="number" id="height-input" value="50" class="white-panel text-ordinary">
+          <div class="text-ordinary" id="limit">Limit is 250x250</div>
+          <div id="create-file-final" class="main-panel label-panel button"><span class="text">CREATE</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="file-export-modal" class="modal">
+      <div class="modal-content">
+        <div class="main-panel label-panel"><span class="text">Export the file</span></div>
+        <div class="text">Enlarge</div>
+        <input type="range">
+        <div class="button text-ordinary" id="export-to-bmp">Export to BMP32</div>
+        <div class="button text-ordinary" id="export-to-gif">Export to GIF</div>
+      </div>
+    </div>
+
+    <div id="shortcuts-modal" class="modal">
+      <div class="modal-content">
+        <div id="shortcuts-table">
+          <div class="white-panel label-panel table-header">
+            <span class="text">Action</span>
+          </div>
+          <div class="white-panel label-panel table-header">
+            <span class="text">Shortcut</span>
+          </div>
+          </div>
+        </div>
       </div>
     </div>
   </body>

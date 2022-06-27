@@ -2,9 +2,9 @@
 Set of functions which define how canvas is rendered into HTML.
  */
 import { Color } from '../utilities/color.js';
-import { BmpEncoder } from '../utilities/bmp_encoder.js';
+import { BmpEncoder, BmpVersions } from '../utilities/bmp_encoder.js';
 import { applyImageMixin } from '../utilities/image.js';
-import { bytesToUrl } from '../utilities/bytes_conversion.js';
+import { bytesToBase64, setImageBase64 } from '../utilities/bytes_conversion.js';
 
 /*
 Constants associated with zoom system
@@ -15,7 +15,6 @@ const ZOOM_MIN = 1;
 const ZOOM_STEP = 1;
 
 const TRANSLATION = 50;
-const backgroundId = 'canvas-background'; //Will be refactored with usage of different HTML structure
 
 /*
 A class for managing graphic representation of canvas
@@ -23,53 +22,82 @@ A class for managing graphic representation of canvas
 class CanvasRenderer {
   constructor() {
     this.canvasWrapper = document.getElementById('canvas-wrapper');
+    this.canvasLayers = document.getElementById('canvas-layers');
     this.zoomValue = 1;
   }
 
   appendCanvas(canvas) {
-    const width = canvas.mainElement.width;
-    const height = canvas.mainElement.height;
+    const width = canvas.element.width;
+    const height = canvas.element.height;
 
     this.canvasWrapper.style.aspectRatio = width / height;
-    this.#setUpElement(canvas.mainElement);
+    this.#setUpElement(canvas.element);
     CanvasRenderer.#setUpBackground(width, height);
     this.adjustSize();
   }
 
   /*
   Layers are redrawn each time the canvas changes.
-  For optimization we convert background image to BMP format and render it with <div> tag, which doesn't update
+  For optimization we convert background image to BMP format.
+  Rendering is done with <div> tag, which doesn't update
    */
   static #setUpBackground(width, height) {
     const image = new ImageData(width, height);
     applyImageMixin(image);
-
     toBasicBackground(image);
-
-    const encoder = new BmpEncoder(image);
-    const url = bytesToUrl(encoder.encode());
-    const imageElement = document.getElementById(backgroundId);
-    imageElement.style.backgroundImage = `url(${url})`;
+    CanvasRenderer.#setUpImage('canvas-background', image);
   }
 
-  #setUpElement(canvasElement) {
-    canvasElement.oncontextmenu = () => false; //Disable right click context menu on canvas
-    canvasElement.classList.add('canvas-element');
-    this.canvasWrapper.appendChild(canvasElement); //Canvas is wrapped to manage zooming
+  setOverlay(canvas) {
+    const image = canvas ? canvas.getJoinedImage() : null;
+    CanvasRenderer.#setUpImage('canvas-overlay', image);
   }
 
-  removeCanvases() {
-    const children = this.canvasWrapper.children;
-    for (const child of children) {
-      if (child.id !== backgroundId) {
-        child.remove();
-      }
+  static #setUpImage(id, image) {
+    const imageElement = document.getElementById(id);
+    const clearImage = () => {
+      imageElement.style.backgroundImage = '';
+    };
+
+    if (!image) {
+      clearImage();
+      return;
+    }
+
+    const encoder = new BmpEncoder(BmpVersions.BMP_32);
+    const data = bytesToBase64(encoder.encode(image));
+    if (encoder.isLastEncodedTransparent()) {
+      clearImage();
+    } else {
+      setImageBase64(imageElement, data);
     }
   }
 
-  zoom(positive) {
-    if (!this.#canScale(positive)) return;
-    this.zoomValue = positive ? this.zoomValue + ZOOM_STEP : this.zoomValue - ZOOM_STEP;
+  #setUpElement(canvasElement) {
+    //Disable right click context menu on canvas
+    canvasElement.oncontextmenu = () => false;
+    canvasElement.classList.add('canvas-element');
+    //Canvas is wrapped to manage zooming
+    this.canvasLayers.appendChild(canvasElement);
+  }
+
+  removeCanvases() {
+    this.canvasLayers.innerHTML = '';
+  }
+
+  zoomIn() {
+    this.#zoom(ZOOM_STEP);
+  }
+
+  zoomOut() {
+    this.#zoom(-ZOOM_STEP);
+  }
+
+  #zoom(step) {
+    if (!this.#canScale(step)) {
+      throw Error('Attempting to overflow zoom value');
+    }
+    this.zoomValue += step;
     this.adjustSize();
   }
 
@@ -79,12 +107,9 @@ class CanvasRenderer {
     setWrapperSize(this.canvasWrapper, this.zoomValue);
   }
 
-  #canScale(positive) {
-    if (positive) {
-      return this.zoomValue <= ZOOM_MAX;
-    } else {
-      return this.zoomValue > ZOOM_MIN;
-    }
+  #canScale(step) {
+    const newValue = this.zoomValue + step;
+    return newValue >= ZOOM_MIN && newValue <= ZOOM_MAX;
   }
 }
 
@@ -92,7 +117,7 @@ class CanvasRenderer {
 const BACKGROUND_COLOR_WHITE = '#ffffff';
 const BACKGROUND_COLOR_GREY = '#e3e3e3';
 
-//Function to turn image into a basic grey-white background which indicates transparency
+//Function to turn image into a basic grey-white "transparent" background
 function toBasicBackground(image) {
   for (let i = 0; i < image.width; i++) {
     for (let j = 0; j < image.height; j++) {
@@ -104,7 +129,8 @@ function toBasicBackground(image) {
 
 //Get color of transparent pixel based on its coordinates
 function getClearPixelColor(i, j) {
-  if (i % 2 !== j % 2) { //The condition makes sure that neighbouring pixels are always of different color
+  //Make sure that neighbouring pixels are always of different color
+  if (i % 2 !== j % 2) {
     return BACKGROUND_COLOR_WHITE; //First pixel is always white
   } else {
     return BACKGROUND_COLOR_GREY;
@@ -112,30 +138,23 @@ function getClearPixelColor(i, j) {
 }
 
 function handleCentering(element, centered) {
-  element.style.transform = centered ? `translate(-${TRANSLATION}%, -${TRANSLATION}%)` : 'none';
+  const centerTransformation = `translate(-${TRANSLATION}%, -${TRANSLATION}%)`;
+  element.style.transform = centered ? centerTransformation : 'none';
   element.style.left = centered ? `${TRANSLATION}%` : '0pt';
   element.style.top = centered ? `${TRANSLATION}%` : '0pt';
 }
 
 function setWrapperSize(wrapper, zoomValue) {
+  const { offsetWidth: width, offsetHeight: height } = wrapper;
   const parent = wrapper.parentElement;
+  const { offsetWidth: parentWidth, offsetHeight: parentHeight } = parent;
 
   const maxPercent = `${zoomValue * 100}%`;
   const unset = 'auto';
 
-  const toWidth = wrapper.offsetWidth * parent.offsetHeight >= parent.offsetWidth * wrapper.offsetHeight;
+  const toWidth = width * parentHeight >= parentWidth * height;
   wrapper.style.width = toWidth ? maxPercent : unset;
   wrapper.style.height = toWidth ? unset : maxPercent;
 }
 
-function setupColorPicker(canvas) { //To be refactored
-  const colorPicker = document.createElement('input'); //Input element with type "color"
-  colorPicker.type = 'color';
-  colorPicker.id = 'color-picker';
-  colorPicker.oninput = () => {
-    canvas.state.color = Color.fromHex(colorPicker.value);
-  };
-  return colorPicker;
-}
-
-export { CanvasRenderer, setupColorPicker };
+export { CanvasRenderer };
